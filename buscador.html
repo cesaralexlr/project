@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TIMSA</title>
+    <style>
+        /* Add your CSS styles here */
+        #autocomplete-container {
+            position: relative;
+            display: inline-block;
+        }
+        
+        #autocomplete-input {
+            width: 280px;
+            padding: 10px;
+            font-size: 16px;
+        }
+        
+        #suggestions-list {
+            position: absolute;
+            z-index: 1;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            border: 1px solid #ccc;
+            max-height: 150px;
+            overflow-y: auto;
+            width: 300px;
+        }
+        
+        #suggestions-list li {
+            padding: 10px;
+            cursor: pointer;
+        }
+        
+        #suggestions-list li:hover {
+            background-color: #e6eff4;
+        }
+        
+        .selected {
+            background-color: #e6eff4;
+        }
+
+        /* Add styles for the visible clipboard textarea */
+        #clipboard-textarea {
+            position: absolute;
+            top: 8px;
+            left: 320px;
+            z-index: 2;
+            background-color: white;
+            color: black;
+            vertical-align: middle;
+            box-sizing: border-box;
+            padding: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="autocomplete-container">
+        <input type="text" id="autocomplete-input" placeholder="Escribe algo..." >
+        <ul id="suggestions-list"></ul>
+    </div>
+
+    <!-- Add a visible textarea for copying text to clipboard -->
+    <textarea id="clipboard-textarea" placeholder="Si está en Timsa, está bien" readonly></textarea>
+    <script>
+        // Función para cargar sugerencias desde un archivo JSON
+        async function cargarSugerencias() {
+            const response = await fetch('suggestions.json'); // Reemplaza 'suggestions.json' con la ruta correcta de tu archivo
+            const data = await response.json();
+            return data;
+        }
+
+        // Después de cargar las sugerencias desde el archivo JSON
+        cargarSugerencias().then(suggestionsListData => {
+            const autocompleteInput = document.getElementById('autocomplete-input');
+            const suggestionsList = document.getElementById('suggestions-list');
+            const clipboardTextarea = document.getElementById('clipboard-textarea');
+            let selectedSuggestionIndex = -1;
+            let lastCopiedValue = ''; // Variable para almacenar el último valor copiado
+
+            autocompleteInput.addEventListener('input', function() {
+                const searchText = this.value.toLowerCase();
+                const matchingSuggestions = suggestionsListData.filter(suggestion => suggestion.toLowerCase().includes(searchText));
+                
+                // Clear previous suggestions
+                suggestionsList.innerHTML = '';
+                
+                // Display matching suggestions
+                matchingSuggestions.forEach((suggestion, index) => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = suggestion;
+                    listItem.addEventListener('click', function() {
+                        // Clear the input value
+                        autocompleteInput.value = '';
+
+                        // Set the clipboard textarea's value and copy to clipboard
+                        clipboardTextarea.value = suggestion;
+                        clipboardTextarea.select();
+                        
+                        try {
+                            // Copy the selected text to the clipboard using the Clipboard API
+                            document.execCommand('copy');
+                        } catch (err) {
+                            console.error('Unable to copy to clipboard:', err);
+                        }
+
+                        // Clear suggestions
+                        suggestionsList.innerHTML = '';
+                        autocompleteInput.focus();
+                        autocompleteInput.value = '';
+                    });
+                    suggestionsList.appendChild(listItem);
+                    
+                    // Handle mouse hover for suggestions
+                    listItem.addEventListener('mouseover', () => {
+                        selectedSuggestionIndex = index;
+                        updateSelectedSuggestion();
+                    });
+                });
+                
+                // Show/hide suggestions based on input
+                if (matchingSuggestions.length > 0) {
+                    suggestionsList.style.display = 'block';
+                    updateSelectedSuggestion();
+                } else {
+                    suggestionsList.style.display = 'none';
+                }
+
+                if (matchingSuggestions.length === 1) {
+                    clipboardTextarea.value = matchingSuggestions[0];
+                    clipboardTextarea.select();
+                    
+                    try {
+                        // Copy the selected text to the clipboard using the Clipboard API
+                        document.execCommand('copy');
+                    } catch (err) {
+                        console.error('Unable to copy to clipboard:', err);
+                    }
+                
+                    suggestionsList.innerHTML = ''; // Clear suggestions
+                    lastCopiedValue.textContent = matchingSuggestions[0]; // Update the last copied value
+                    autocompleteInput.value = ''; // Clear
+                    autocompleteInput.focus();
+                }
+            });
+
+            autocompleteInput.addEventListener('keydown', function(event) {
+                const suggestions = suggestionsList.querySelectorAll('li');
+                
+                if (event.key === 'ArrowDown') {
+                    // Handle down arrow key
+                    event.preventDefault(); // Prevent page scroll
+                    if (selectedSuggestionIndex < suggestions.length - 1) {
+                        selectedSuggestionIndex++;
+                        updateSelectedSuggestion();
+                    }
+                } else if (event.key === 'ArrowUp') {
+                    // Handle up arrow key
+                    event.preventDefault(); // Prevent page scroll
+                    if (selectedSuggestionIndex > 0) {
+                        selectedSuggestionIndex--;
+                        updateSelectedSuggestion();
+                    }
+                } else if (event.key === 'Enter') {
+                    // Handle Enter key
+                    if (selectedSuggestionIndex >= 0) {
+                        autocompleteInput.value = suggestions[selectedSuggestionIndex].textContent;
+                        
+                        // Set the clipboard textarea's value and copy to clipboard
+                        clipboardTextarea.value = suggestions[selectedSuggestionIndex].textContent;
+                        clipboardTextarea.select();
+
+                        try {
+                            // Copy the selected text to the clipboard using the Clipboard API
+                            document.execCommand('copy');
+                            
+                            // Actualizar el último valor copiado
+                            lastCopiedValue = suggestions[selectedSuggestionIndex].textContent;
+                        } catch (err) {
+                            console.error('Unable to copy to clipboard:', err);
+                        }
+                        autocompleteInput.focus();
+                        autocompleteInput.value = '';
+                        suggestionsList.innerHTML = '';
+                    }
+                }
+            });
+
+            function updateSelectedSuggestion() {
+                const suggestions = suggestionsList.querySelectorAll('li');
+                suggestions.forEach((suggestion, index) => {
+                    if (index === selectedSuggestionIndex) {
+                        suggestion.classList.add('selected');
+                    } else {
+                        suggestion.classList.remove('selected');
+                    }
+                });
+            }
+        });
+    </script>
+    
+</body>
+</html>
